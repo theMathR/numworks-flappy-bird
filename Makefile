@@ -20,6 +20,7 @@ CFLAGS += -ggdb
 LDFLAGS = -Wl,--relocatable
 LDFLAGS += -nostartfiles
 LDFLAGS += --specs=nano.specs
+LDFLAGS += -lm
 # LDFLAGS += --specs=nosys.specs # Alternatively, use full-fledged newlib
 
 ifeq ($(LINK_GC),1)
@@ -56,7 +57,7 @@ $(BUILD_DIR)/%.elf: $(BUILD_DIR)/%.nwa src/input.txt
 
 $(BUILD_DIR)/app.nwa: $(call object_for,$(src)) $(BUILD_DIR)/icon.o
 	@echo "LD      $@"
-	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+	$(Q) $(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
 $(addprefix $(BUILD_DIR)/,%.o): %.c | $(BUILD_DIR)
 	@echo "CC      $^"

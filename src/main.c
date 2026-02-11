@@ -1,75 +1,71 @@
-#include <eadk.h>
-#include <stdlib.h>
+#include "eadk.h"
+#include <math.h>
 #include <string.h>
-#include <stdio.h>
+#define INCBIN_PREFIX
+#define INCBIN_STYLE INCBIN_STYLE_SNAKE
+#include "incbin.h"
 
-const char eadk_app_name[] __attribute__((section(".rodata.eadk_app_name"))) = "App";
+const char eadk_app_name[] __attribute__((section(".rodata.eadk_app_name"))) = "Flappy Bird";
 const uint32_t eadk_api_level  __attribute__((section(".rodata.eadk_api_level"))) = 0;
 
-eadk_color_t random_color() {
-  return (eadk_color_t)eadk_random();
-}
+const eadk_color_t light_blue = 0x949f;
 
-eadk_rect_t random_screen_rect() {
-  uint16_t x = eadk_random() % (EADK_SCREEN_WIDTH - 1);
-  uint16_t y = eadk_random() % (EADK_SCREEN_HEIGHT - 1);
-  uint16_t width = eadk_random() % (EADK_SCREEN_WIDTH - x);
-  uint16_t height = eadk_random() % (EADK_SCREEN_HEIGHT - y);
-  return (eadk_rect_t){x, y, width, height};
-}
+INCBIN(eadk_color_t, spr_ground, "spritesbin/groundsegment.bin");
+const int spr_ground_width = 24;
+const int spr_ground_height = 40;
 
-void draw_random_colorful_rectangles() {
-  eadk_display_push_rect_uniform(eadk_screen_rect, eadk_color_black);
-  for (int i=0; i<100; i++) {
-    eadk_display_push_rect_uniform(random_screen_rect(), random_color());
-  }
-}
+INCBIN(eadk_color_t, spr_bird, "spritesbin/yellowbird-upflap.bin");
+const int spr_bird_width = 34;
+const int spr_bird_height = 24;
+const int bird_square_size = 40;
 
-void draw_random_buffer() {
-  eadk_rect_t rect = {0, 0, 30, 30};
-  size_t bufferSize = rect.width*rect.height*sizeof(eadk_color_t);
-  eadk_color_t * pixels = (eadk_color_t *)malloc(bufferSize);
-  if (pixels == NULL) {
-    return;
-  }
-  memset(pixels, 0, bufferSize);
-  for (int i=0; i<rect.width*rect.height; i++) {
-    pixels[i] = random_color();
-  }
-  eadk_display_push_rect(rect, pixels);
-  free(pixels);
-}
 
-void move_pointer() {
-  uint16_t size = 10;
-  eadk_rect_t cursor = {(EADK_SCREEN_WIDTH-size)/2, (EADK_SCREEN_HEIGHT-size)/2, size, size};
-  while (true) {
-    eadk_keyboard_state_t keyboard = eadk_keyboard_scan();
-    if (eadk_keyboard_key_down(keyboard, eadk_key_back)) {
-      return;
-    }
-    if (eadk_keyboard_key_down(keyboard, eadk_key_left) && cursor.x > 0) {
-      cursor.x -= 1;
-    }
-    if (eadk_keyboard_key_down(keyboard, eadk_key_up) && cursor.y > 0) {
-      cursor.y -= 1;
-    }
-    if (eadk_keyboard_key_down(keyboard, eadk_key_right) && cursor.x < EADK_SCREEN_WIDTH-size ) {
-      cursor.x += 1;
-    }
-    if (eadk_keyboard_key_down(keyboard, eadk_key_down) && cursor.y < EADK_SCREEN_HEIGHT-size) {
-      cursor.y += 1;
-    }
-    eadk_display_push_rect_uniform(cursor, random_color());
-    eadk_timing_msleep(20);
-  }
-}
+int scroll = 0;
+int bird_x = 50;
+int bird_y = 60;
+double bird_angle;
 
-int main(int argc, char * argv[]) {
-  printf("External data : '%s'\n", eadk_external_data);
-  eadk_timing_msleep(3000);
-  draw_random_colorful_rectangles();
-  draw_random_buffer();
-  eadk_display_draw_string("Hello, world!", (eadk_point_t){0, 0}, true, eadk_color_black, eadk_color_white);
-  move_pointer();
+int main() {
+    while (true) {
+
+        bird_angle += 0.01;
+        scroll++;
+
+        for (int y=0;y<EADK_SCREEN_HEIGHT;y++) {
+
+            eadk_color_t line_buffer[EADK_SCREEN_WIDTH];
+
+            // Draw background
+            if (y < 240 - spr_ground_height) {
+                memset(line_buffer, light_blue, sizeof(line_buffer));
+            } else {
+                for (int x = 0; x < EADK_SCREEN_WIDTH; x++) {
+                    line_buffer[x] = spr_ground_data[((x+scroll)%spr_ground_width) + (y-240+spr_ground_height)*spr_ground_width];
+                }
+            }
+
+            // Draw bird
+            if (y >= bird_y && y < bird_y + bird_square_size) {
+                double sin_a = -sin(bird_angle);
+                double cos_a = cos(bird_angle);
+                double y_ = y-bird_y-(double)bird_square_size/2;
+                for (int x = 0; x<bird_square_size; x++) {
+                    line_buffer[x + bird_x] = eadk_color_red;
+                    double x_ = x - (double)bird_square_size/2;
+                    int rotated_x = x_ * cos_a - y_ * sin_a + (double)spr_bird_width/2;
+                    int rotated_y = x_ * sin_a + y_ * cos_a + (double)spr_bird_height/2;
+                    if (!(rotated_x >= 0 && rotated_x < spr_bird_width && rotated_y >= 0 && rotated_y < spr_bird_height)) continue;
+                    const eadk_color_t pixel_color = spr_bird_data[rotated_y*spr_bird_width + rotated_x];
+                    if (pixel_color != 0x1234) {
+                        line_buffer[x + bird_x]  = pixel_color;
+                    }
+                }
+            }
+
+            eadk_display_push_rect((eadk_rect_t){0,y,EADK_SCREEN_WIDTH,1}, line_buffer);
+        }
+        eadk_display_wait_for_vblank();
+
+        if (eadk_keyboard_key_down(eadk_keyboard_scan(), eadk_key_home)) return 0;
+    }
 }
