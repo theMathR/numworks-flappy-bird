@@ -1,6 +1,5 @@
 #include "eadk.h"
 #include <math.h>
-#include <string.h>
 #define INCBIN_PREFIX
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 #include "incbin.h"
@@ -8,12 +7,32 @@
 const char eadk_app_name[] __attribute__((section(".rodata.eadk_app_name"))) = "Flappy Bird";
 const uint32_t eadk_api_level  __attribute__((section(".rodata.eadk_api_level"))) = 0;
 
-const eadk_color_t light_blue = 0x949f;
+const eadk_color_t blue_sky = 0x4df9;
+const eadk_color_t white_clouds = 0xeffb;
+const eadk_color_t green_plants = 0x5f0e;
 const eadk_color_t transparent_color = 0x1234;
 
 INCBIN(eadk_color_t, spr_ground, "spritesbin/groundsegment.bin");
 const int spr_ground_width = 24;
 const int spr_ground_height = 30;
+
+INCBIN(eadk_color_t, spr_parallax_bg_0 , "spritesbin/clouds.bin");
+INCBIN(eadk_color_t, spr_parallax_bg_1 , "spritesbin/city_back.bin");
+INCBIN(eadk_color_t, spr_parallax_bg_2 , "spritesbin/city.bin");
+INCBIN(eadk_color_t, spr_parallax_bg_3 , "spritesbin/trees.bin");
+typedef struct {
+    const eadk_color_t* sprite;
+    const int width;
+    const int height;
+    const int y;
+} parallax_bg_t;
+#define bg_layer_count 4
+const parallax_bg_t parallax_bgs[bg_layer_count] = {
+    {spr_parallax_bg_0_data, 284, 22, 130},
+    {spr_parallax_bg_1_data, 60, 45, 150},
+    {spr_parallax_bg_2_data, 68, 45, 150},
+    {spr_parallax_bg_3_data, 284, 18, 180},
+};
 
 INCBIN(eadk_color_t, spr_bird_a, "spritesbin/yellowbird-upflap.bin");
 INCBIN(eadk_color_t, spr_bird_b, "spritesbin/yellowbird-midflap.bin");
@@ -248,7 +267,22 @@ int main() {
             }
 
             // Draw background
-            memset(line_buffer, light_blue, sizeof(eadk_color_t) * EADK_SCREEN_WIDTH);
+            eadk_color_t bg_color = blue_sky;
+            if (y >= parallax_bgs[3].y + parallax_bgs[3].height) bg_color = green_plants;
+            else if (y >= parallax_bgs[0].y + parallax_bgs[0].height) bg_color = white_clouds;
+            for (int x = 0; x < EADK_SCREEN_WIDTH; x++) // tried using memset and got the wrong colors???
+                line_buffer[x] = bg_color;
+
+            for (int i=0;i<bg_layer_count;i++) { // Draw layers
+                parallax_bg_t layer = parallax_bgs[i];
+                int layer_scroll = scroll/(bg_layer_count-i+1);
+                if (y >= layer.y && y < layer.y + layer.height)
+                    for (int x = 0; x < EADK_SCREEN_WIDTH; x++) {
+                        eadk_color_t pixel_color = layer.sprite[((x+layer_scroll)%layer.width) + (y - layer.y)*layer.width];
+                        if (pixel_color != transparent_color)
+                            line_buffer[x] = pixel_color;
+                    }
+            }
 
             // Draw pipes
             for (int i=0;i<pipes_size;i++) {
