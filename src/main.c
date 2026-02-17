@@ -13,12 +13,12 @@ const eadk_color_t transparent_color = 0x1234;
 
 INCBIN(eadk_color_t, spr_ground, "spritesbin/groundsegment.bin");
 const int spr_ground_width = 24;
-const int spr_ground_height = 40;
+const int spr_ground_height = 30;
 
 INCBIN(eadk_color_t, spr_bird_a, "spritesbin/yellowbird-upflap.bin");
 INCBIN(eadk_color_t, spr_bird_b, "spritesbin/yellowbird-midflap.bin");
 INCBIN(eadk_color_t, spr_bird_c, "spritesbin/yellowbird-downflap.bin");
-const eadk_color_t* spr_bird_frames[] = {spr_bird_a_data, spr_bird_b_data, spr_bird_c_data};
+const eadk_color_t* spr_bird_frames[] = {spr_bird_a_data, spr_bird_b_data, spr_bird_c_data, spr_bird_b_data};
 const int spr_bird_width = 34;
 const int spr_bird_height = 24;
 const int bird_draw_size = 40;
@@ -47,6 +47,17 @@ const int spr_digit_height = 36;
 const int spr_digit_1_width = 16;
 const int digit_y = 30;
 
+INCBIN(eadk_color_t, spr_title, "spritesbin/title.bin");
+const int spr_title_width = 178;
+const int spr_title_height = 48;
+
+INCBIN(eadk_color_t, spr_ready, "spritesbin/ready.bin");
+const int spr_ready_width = 184;
+const int spr_ready_height = 50;
+const int ready_y = 130;
+
+int blink = 0;
+
 int scroll = 0;
 int score = 0;
 
@@ -59,9 +70,8 @@ double cos_a = 1;
 const int bird_collision_margin_x = 10;
 const int bird_collision_margin_y = 10;
 
-const eadk_color_t* spr_bird_data = spr_bird_c_data;
-const int bird_anim_speed = 5;
-int bird_anim = 2*bird_anim_speed;
+const eadk_color_t* spr_bird_data = spr_bird_b_data;
+int bird_anim = 0;
 
 bool press_registered = true; // True because you press OK to launch the app
 
@@ -104,11 +114,13 @@ typedef enum {
 game_state_t game_state = GAME_NOT_STARTED;
 
 void end_game() {
+    blink = 0;
     game_state = GAME_OVER;
     bird_dy = -8;
 };
 
 void init_game() {
+    blink = 0;
     bird_dy = -5;
     scroll = 0;
     score = 0;
@@ -123,16 +135,17 @@ void init_game() {
 
 void update_bird_fall() {
     // Animation
-    spr_bird_data = spr_bird_frames[bird_anim/bird_anim_speed];
-    if (bird_anim < 2 * bird_anim_speed)
+    if (bird_dy < 0) {
+        spr_bird_data = spr_bird_frames[bird_anim%4];
         bird_anim++;
+    } else spr_bird_data = spr_bird_b_data;
 
     // Gravity
     bird_dy += 0.5;
     bird_y += bird_dy;
 
     // Angle stuff
-    bird_angle = atan(bird_dy/5.);
+    bird_angle = (bird_angle + 3*atan(bird_dy/5.))/4; // Smoothed
     sin_a = -sin(bird_angle);
     cos_a = cos(bird_angle);
 }
@@ -149,9 +162,10 @@ int main() {
                 // Start game
                 if (eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered) {
                     game_state = GAME_ON;
+                    blink=0;
                     press_registered = true;
                 }
-
+                blink++;
                 break;
             case GAME_OVER:
                 update_bird_fall(); // Keep the bird falling
@@ -163,6 +177,7 @@ int main() {
                     press_registered = true;
                 }
 
+                blink++;
                 break;
             case GAME_ON:
                 // Check bird collision
@@ -254,17 +269,29 @@ int main() {
                 draw_sprite_line(line_buffer, pipe.x, sprite_y, spr_pipe_width, spr_pipe_head_data);
             }
 
-            // Draw score
-            if (y >= digit_y && y < digit_y + spr_digit_height) {
-                // Digits are drawn from right to left
-                int score_digits = score;
-                int x = score_base_x;
-                for (int i=0;i<score_digit_count;i++) {
-                    int digit = score_digits%10;
-                    int width = digit==1? spr_digit_1_width : spr_digit_width; // Digit 1 has a different width than the others
-                    x -= width-2; // -2 pixels margin
-                    draw_sprite_line(line_buffer, x, y-digit_y, width, spr_digits[digit]);
-                    score_digits /= 10; // Next digit
+            if (game_state == GAME_NOT_STARTED) {
+                // Draw title
+                if (y >= digit_y && y < digit_y + spr_title_height) {
+                    draw_sprite_line(line_buffer, (EADK_SCREEN_WIDTH-spr_title_width)/2, y-digit_y, spr_title_width, spr_title_data);
+                }
+
+                // Draw blinking "Get ready!"
+                if (!((blink/16)%2) && y >= ready_y && y < ready_y + spr_ready_height) {
+                    draw_sprite_line(line_buffer, (EADK_SCREEN_WIDTH-spr_ready_width)/2, y-ready_y, spr_ready_width, spr_ready_data);
+                }
+            } else if (!((blink/16)%2)) { // Check blinking
+                // Draw score
+                if (y >= digit_y && y < digit_y + spr_digit_height) {
+                    // Digits are drawn from right to left
+                    int score_digits = score;
+                    int x = score_base_x;
+                    for (int i=0;i<score_digit_count;i++) {
+                        int digit = score_digits%10;
+                        int width = digit==1? spr_digit_1_width : spr_digit_width; // Digit 1 has a different width than the others
+                        x -= width-2; // -2 pixels margin
+                        draw_sprite_line(line_buffer, x, y-digit_y, width, spr_digits[digit]);
+                        score_digits /= 10; // Next digit
+                    }
                 }
             }
 
