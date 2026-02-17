@@ -30,17 +30,23 @@ const int spr_pipe_width = 52;
 
 int scroll = 0;
 
-int bird_x = 50;
-int bird_y = 60;
-double bird_dy = 0;
-double bird_angle;
+const int bird_x = 50;
+int bird_y;
+double bird_dy;
+double bird_angle = 0;
+double sin_a = 0;
+double cos_a = 1;
+const int bird_collision_margin_x = 10;
+const int bird_collision_margin_y = 10;
 
 const eadk_color_t* spr_bird_data = spr_bird_c_data;
-const int bird_anim_speed = 6;
+const int bird_anim_speed = 5;
 int bird_anim = 2*bird_anim_speed;
 
-bool press_registered = false;
+bool press_registered = true; // True because you press OK to launch the app
 
+const int pipe_collision_margin_x = 2;
+const int pipe_collision_margin_y = 2;
 const int pipe_hole_size = 80;
 typedef struct {
     int x;
@@ -69,48 +75,118 @@ void draw_sprite_line(eadk_color_t line_buffer[], int sprite_x, int y, int sprit
     }
 }
 
-int main() {
+typedef enum {
+    GAME_NOT_STARTED,
+    GAME_ON,
+    GAME_OVER,
+} game_state_t;
+
+game_state_t game_state = GAME_NOT_STARTED;
+
+void end_game() {
+    game_state = GAME_OVER;
+    bird_dy = -8;
+};
+
+void init_game() {
+    bird_dy = -5;
+    scroll = 0;
+    bird_y = (EADK_SCREEN_HEIGHT-spr_ground_height-bird_draw_size)/2; // Centered
+
     // Init pipes
     for (int i=0;i<pipes_size;i++) {
         pipes[i].x = EADK_SCREEN_WIDTH + i * space_between_pipes;
         pipes[i].hole_y = random_pipe_hole_height();
     }
+}
+
+void update_bird_fall() {
+    // Animation
+    spr_bird_data = spr_bird_frames[bird_anim/bird_anim_speed];
+    if (bird_anim < 2 * bird_anim_speed)
+        bird_anim++;
+
+    // Gravity
+    bird_dy += 0.5;
+    bird_y += bird_dy;
+
+    // Angle stuff
+    bird_angle = atan(bird_dy/5.);
+    sin_a = -sin(bird_angle);
+    cos_a = cos(bird_angle);
+}
+
+int main() {
+    init_game();
 
     while (true) {
         eadk_keyboard_state_t keyboard = eadk_keyboard_scan();
 
-        // Jump
-        if (eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered) {
-            bird_dy = -5;
-            press_registered = true;
-            bird_anim = 0;
+        // Game logic
+        switch (game_state) {
+            case GAME_NOT_STARTED:
+                // Start game
+                if (eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered) {
+                    game_state = GAME_ON;
+                    press_registered = true;
+                }
+
+                break;
+            case GAME_OVER:
+                update_bird_fall(); // Keep the bird falling
+
+                // Restart game (only once the bird starts falling)
+                if (bird_dy > 0 && eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered) {
+                    init_game();
+                    game_state = GAME_ON;
+                    press_registered = true;
+                }
+
+                break;
+            case GAME_ON:
+                // Check bird collision
+                if (bird_y+bird_collision_margin_y < 0) // Sky touched?
+                    end_game();
+                if (bird_y+bird_draw_size-bird_collision_margin_y > EADK_SCREEN_HEIGHT-spr_ground_height) // Ground touched?
+                    end_game();
+                for (int i=0;i<pipes_size;i++) { // Pipes touched?
+                    pipe_t pipe = pipes[i];
+                    if (
+                        bird_x+bird_draw_size-bird_collision_margin_x > pipe.x+pipe_collision_margin_x &&
+                        bird_x+bird_collision_margin_x < pipe.x+spr_pipe_width-pipe_collision_margin_x &&
+                        !(
+                            bird_y+bird_collision_margin_y > pipe.hole_y-pipe_collision_margin_y &&
+                            bird_y+bird_draw_size-bird_collision_margin_y < pipe.hole_y+pipe_hole_size+pipe_collision_margin_y
+                        )
+                    )
+                        end_game();
+                }
+
+                // Jump
+                if (eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered) {
+                    bird_dy = -5;
+                    press_registered = true;
+                    bird_anim = 0;
+                }
+
+                // Make bird fall
+                update_bird_fall();
+
+                // Scroll screen
+                int scroll_speed = 1;
+                scroll+=scroll_speed;
+                for (int i=0;i<pipes_size;i++) { // Scroll pipes
+                    pipes[i].x -= scroll_speed;
+                    if (pipes[i].x < -space_between_pipes) { // Wrap around
+                        pipes[i].x = EADK_SCREEN_WIDTH;
+                        pipes[i].hole_y = random_pipe_hole_height();
+                    }
+                }
+
+                break;
         }
+
         if (!eadk_keyboard_key_down(keyboard, eadk_key_ok)) press_registered = false;
-
-        // Animation
-        spr_bird_data = spr_bird_frames[bird_anim/bird_anim_speed];
-        if (bird_anim < 2 * bird_anim_speed)
-            bird_anim++;
-
-        // Gravity
-        bird_dy += 0.5;
-        bird_y += bird_dy;
-
-        // Angle stuff
-        bird_angle = atan(bird_dy/5.);
-        double sin_a = -sin(bird_angle);
-        double cos_a = cos(bird_angle);
-
-        // Scroll
-        int scroll_speed = 1;
-        scroll+=scroll_speed;
-        for (int i=0;i<pipes_size;i++) { // Scroll pipes
-            pipes[i].x -= scroll_speed;
-            if (pipes[i].x < -space_between_pipes) { // Wrap around
-                pipes[i].x = EADK_SCREEN_WIDTH;
-                pipes[i].hole_y = random_pipe_hole_height();
-            }
-        }
 
         // Draw everything line by line
         eadk_color_t line_buffer[EADK_SCREEN_WIDTH];
@@ -120,7 +196,7 @@ int main() {
                 for (int x = 0; x < EADK_SCREEN_WIDTH; x++) {
                     line_buffer[x] = spr_ground_data[((x+scroll)%spr_ground_width) + (y-240+spr_ground_height)*spr_ground_width];
                 }
-                goto done_with_this_line; // Stop drawing
+                goto skip_drawing_above_ground;
             }
 
             // Draw background
@@ -145,6 +221,8 @@ int main() {
                 draw_sprite_line(line_buffer, pipe.x, sprite_y, spr_pipe_width, spr_pipe_head_data);
             }
 
+            skip_drawing_above_ground:
+
             // Draw rotated bird
             if (y >= bird_y && y < bird_y + bird_draw_size) {
                 double rel_y = y-bird_y-(double)bird_draw_size/2;
@@ -162,8 +240,7 @@ int main() {
                 }
             }
 
-            done_with_this_line:
-             // Display line
+            // Display line
             eadk_display_push_rect((eadk_rect_t){0,y,EADK_SCREEN_WIDTH,1}, line_buffer);
         }
         eadk_display_wait_for_vblank();
