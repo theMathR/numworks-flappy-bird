@@ -28,7 +28,27 @@ INCBIN(eadk_color_t, spr_pipe_segment, "spritesbin/pipe_segment.bin");
 const int spr_pipe_head_height = 26;
 const int spr_pipe_width = 52;
 
+INCBIN(eadk_color_t, spr_digit_0, "spritesbin/0.bin");
+INCBIN(eadk_color_t, spr_digit_1, "spritesbin/1.bin");
+INCBIN(eadk_color_t, spr_digit_2, "spritesbin/2.bin");
+INCBIN(eadk_color_t, spr_digit_3, "spritesbin/3.bin");
+INCBIN(eadk_color_t, spr_digit_4, "spritesbin/4.bin");
+INCBIN(eadk_color_t, spr_digit_5, "spritesbin/5.bin");
+INCBIN(eadk_color_t, spr_digit_6, "spritesbin/6.bin");
+INCBIN(eadk_color_t, spr_digit_7, "spritesbin/7.bin");
+INCBIN(eadk_color_t, spr_digit_8, "spritesbin/8.bin");
+INCBIN(eadk_color_t, spr_digit_9, "spritesbin/9.bin");
+const eadk_color_t* spr_digits[] = {
+    spr_digit_0_data, spr_digit_1_data, spr_digit_2_data, spr_digit_3_data, spr_digit_4_data,
+    spr_digit_5_data, spr_digit_6_data, spr_digit_7_data, spr_digit_8_data, spr_digit_9_data,
+};
+const int spr_digit_width = 24;
+const int spr_digit_height = 36;
+const int spr_digit_1_width = 16;
+const int digit_y = 30;
+
 int scroll = 0;
+int score = 0;
 
 const int bird_x = 50;
 int bird_y;
@@ -61,10 +81,10 @@ int random_pipe_hole_height() {
 }
 
 int min(int a, int b) {
-    return a<b ? a : b;
+    return a<b? a : b;
 }
 int max(int a, int b) {
-    return a>b ? a : b;
+    return a>b? a : b;
 }
 
 void draw_sprite_line(eadk_color_t line_buffer[], int sprite_x, int y, int sprite_width, const eadk_color_t sprite[]) {
@@ -91,6 +111,7 @@ void end_game() {
 void init_game() {
     bird_dy = -5;
     scroll = 0;
+    score = 0;
     bird_y = (EADK_SCREEN_HEIGHT-spr_ground_height-bird_draw_size)/2; // Centered
 
     // Init pipes
@@ -176,6 +197,8 @@ int main() {
                 int scroll_speed = 1;
                 scroll+=scroll_speed;
                 for (int i=0;i<pipes_size;i++) { // Scroll pipes
+                    if (pipes[i].x+spr_pipe_width >= bird_x && pipes[i].x - scroll_speed + spr_pipe_width < bird_x) // Check if pipe passes the bird
+                        score++;
                     pipes[i].x -= scroll_speed;
                     if (pipes[i].x < -space_between_pipes) { // Wrap around
                         pipes[i].x = EADK_SCREEN_WIDTH;
@@ -187,6 +210,16 @@ int main() {
         }
 
         if (!eadk_keyboard_key_down(keyboard, eadk_key_ok)) press_registered = false;
+
+        // Calculate some stuff to draw the score properly
+        int score_digit_count = score? floor(log10(score))+1 : 1;
+        int score_width = 2; // Account for the last rows
+        int score_digits = score;
+        for (int i=0;i<score_digit_count;i++) {
+            score_width += (score_digits%10==1? spr_digit_1_width : spr_digit_width) - 2; // digit 1 has a different width + -2px margin
+            score_digits /= 10; // Next digit
+        }
+        int score_base_x = (EADK_SCREEN_WIDTH+score_width)/2 - 2;
 
         // Draw everything line by line
         eadk_color_t line_buffer[EADK_SCREEN_WIDTH];
@@ -219,6 +252,20 @@ int main() {
                     sprite_y = y - pipe.hole_y - pipe_hole_size - 1;
                 }
                 draw_sprite_line(line_buffer, pipe.x, sprite_y, spr_pipe_width, spr_pipe_head_data);
+            }
+
+            // Draw score
+            if (y >= digit_y && y < digit_y + spr_digit_height) {
+                // Digits are drawn from right to left
+                int score_digits = score;
+                int x = score_base_x;
+                for (int i=0;i<score_digit_count;i++) {
+                    int digit = score_digits%10;
+                    int width = digit==1? spr_digit_1_width : spr_digit_width; // Digit 1 has a different width than the others
+                    x -= width-2; // -2 pixels margin
+                    draw_sprite_line(line_buffer, x, y-digit_y, width, spr_digits[digit]);
+                    score_digits /= 10; // Next digit
+                }
             }
 
             skip_drawing_above_ground:
