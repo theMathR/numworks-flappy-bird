@@ -77,9 +77,8 @@ const int ready_y = 130;
 
 int blink = 0;
 
-double scroll = 0;
+int scroll = 0;
 int score = 0;
-const double scroll_speed = 1.5;
 
 const int bird_x = 50;
 int bird_y;
@@ -99,7 +98,7 @@ const int pipe_collision_margin_x = 2;
 const int pipe_collision_margin_y = 2;
 const int pipe_hole_size = 80;
 typedef struct {
-    double x;
+    int x;
     int hole_y;
 } pipe_t;
 #define pipes_size 4
@@ -170,7 +169,7 @@ void update_bird_fall() {
     cos_a = cos(bird_angle);
 }
 
-int main() {
+int game_main() {
     init_game();
 
     while (true) {
@@ -229,6 +228,7 @@ int main() {
                 update_bird_fall();
 
                 // Scroll screen
+                int scroll_speed = 1;
                 scroll+=scroll_speed;
                 for (int i=0;i<pipes_size;i++) { // Scroll pipes
                     if (pipes[i].x+spr_pipe_width >= bird_x && pipes[i].x - scroll_speed + spr_pipe_width < bird_x) // Check if pipe passes the bird
@@ -261,7 +261,7 @@ int main() {
             // Draw ground
             if (y >= 240 - spr_ground_height) {
                 for (int x = 0; x < EADK_SCREEN_WIDTH; x++) {
-                    line_buffer[x] = spr_ground_data[((x+((int)scroll))%spr_ground_width) + (y-240+spr_ground_height)*spr_ground_width];
+                    line_buffer[x] = spr_ground_data[((x+scroll)%spr_ground_width) + (y-240+spr_ground_height)*spr_ground_width];
                 }
                 goto skip_drawing_above_ground;
             }

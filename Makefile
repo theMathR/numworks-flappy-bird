@@ -37,13 +37,13 @@ LDFLAGS += -flinker-output=nolto-rel
 endif
 
 .PHONY: build
-build: $(BUILD_DIR)/app.nwa
+build: $(BUILD_DIR)/flappy.nwa
 
 .PHONY: check
 check: $(BUILD_DIR)/app.bin
 
 .PHONY: run
-run: $(BUILD_DIR)/app.nwa src/input.txt
+run: $(BUILD_DIR)/flappy.nwa src/input.txt
 	@echo "INSTALL $<"
 	$(Q) $(NWLINK) install-nwa --external-data src/input.txt $<
 
@@ -55,7 +55,7 @@ $(BUILD_DIR)/%.elf: $(BUILD_DIR)/%.nwa src/input.txt
 	@echo "ELF     $@"
 	$(Q) $(NWLINK) nwa-elf --external-data src/input.txt $< $@
 
-$(BUILD_DIR)/app.nwa: $(call object_for,$(src)) $(BUILD_DIR)/icon.o
+$(BUILD_DIR)/flappy.nwa: $(call object_for,$(src)) $(BUILD_DIR)/icon.o
 	@echo "LD      $@"
 	$(Q) $(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
