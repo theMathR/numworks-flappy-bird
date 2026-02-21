@@ -121,6 +121,25 @@ typedef struct {
 pipe_t pipes[pipes_size];
 const int space_between_pipes = EADK_SCREEN_WIDTH/(pipes_size-1);
 
+#define konami_code_length 10
+const eadk_key_t konami_code[konami_code_length] = {
+    eadk_key_up, eadk_key_up, eadk_key_down, eadk_key_down,
+    eadk_key_left, eadk_key_right, eadk_key_left, eadk_key_right,
+    eadk_key_back, eadk_key_ok
+};
+int konami_progress = 0;
+bool konami_press_registered = false;
+
+bool cheat_mode = true;
+const int cheat_randomness_range = 18;
+int cheat_randomness;
+const int cheat_y_margin = 7 + bird_draw_size;
+int cheat_target_y;
+const int cheat_press_cooldown = 7;
+int cheat_press_timer = 0;
+int cheat_next_pipe_index;
+bool cheat_began_targetting;
+
 int random_pipe_hole_height() {
     return eadk_random() % (EADK_SCREEN_HEIGHT - pipe_hole_size - spr_ground_height);
 }
@@ -184,6 +203,10 @@ void init_game() {
         pipes[i].x = EADK_SCREEN_WIDTH + i * space_between_pipes;
         pipes[i].hole_y = random_pipe_hole_height();
     }
+
+    // Init cheating
+    cheat_target_y = EADK_SCREEN_HEIGHT-spr_ground_height-cheat_y_margin; // Just above ground
+    cheat_began_targetting = false;
 }
 
 void update_bird_fall() {
@@ -201,6 +224,12 @@ void update_bird_fall() {
     bird_angle = (bird_angle + 3*atan(bird_dy/5.))/4; // Smoothed
     sin_a = -sin(bird_angle);
     cos_a = cos(bird_angle);
+}
+
+void jump() {
+    bird_dy = -5;
+    press_registered = true;
+    bird_anim = 0;
 }
 
 int main() {
@@ -261,11 +290,38 @@ int main() {
                         end_game();
                 }
 
-                // Jump
-                if (eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered) {
-                    bird_dy = -5;
-                    press_registered = true;
-                    bird_anim = 0;
+                // Jump!
+                if (eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered && !cheat_mode)
+                    jump();
+
+                // Handle cheat mode
+                if (cheat_mode) {
+                    bool still_in_empty_section = scroll < EADK_SCREEN_WIDTH - 2 * spr_pipe_width;
+
+                    // Determine when to jump
+                    if ((cheat_press_timer <= 0 && // If cooldown is over
+                        // And we're below the autojumping line
+                        bird_y >= cheat_target_y + cheat_randomness)
+                        // Or if we're in the empty section, we still register user presses
+                        || (still_in_empty_section && eadk_keyboard_key_down(keyboard, eadk_key_ok) && !press_registered)
+                    ) {
+                        jump();
+                        cheat_randomness = (eadk_random()%cheat_randomness_range) - cheat_randomness_range/2;
+                        cheat_press_timer = cheat_press_cooldown;
+                    }
+
+                    cheat_press_timer--; // Press cooldown
+
+                    // Target the next pipe to adjust height to
+                    if (!cheat_began_targetting && !still_in_empty_section) {
+                        cheat_began_targetting = true;
+                        cheat_next_pipe_index = 0;
+                        cheat_target_y = pipes[cheat_next_pipe_index].hole_y + pipe_hole_size - cheat_y_margin;
+                    }
+                    if (pipes[cheat_next_pipe_index].x + spr_pipe_width*0.75 < bird_x) {
+                        cheat_next_pipe_index = (cheat_next_pipe_index+1)%pipes_size;
+                        cheat_target_y = pipes[cheat_next_pipe_index].hole_y + pipe_hole_size - cheat_y_margin;
+                    }
                 }
 
                 // Make bird fall
@@ -287,6 +343,23 @@ int main() {
         }
 
         if (!eadk_keyboard_key_down(keyboard, eadk_key_ok)) press_registered = false;
+
+        // Toggle cheat
+        if (cheat_mode && eadk_keyboard_key_down(keyboard, eadk_key_back))
+            cheat_mode = false;
+        if (keyboard) { // If key pressed
+            if (!konami_press_registered) {
+                // Check if Konami code is being inputted
+                if (eadk_keyboard_key_down(keyboard, konami_code[konami_progress])) {
+                    konami_progress++;
+                    if (konami_progress >= konami_code_length) {
+                        cheat_mode = true;
+                        konami_progress = 0;
+                    }
+                } else konami_progress = 0;
+                konami_press_registered = true;
+            }
+        } else konami_press_registered = false;
 
         // Calculate some stuff to draw the score properly
         int score_digit_count = score? floor(log10(score))+1 : 1;
@@ -400,5 +473,6 @@ int main() {
     }
 
     // Save file
-    extapp_fileWrite(save_name, (char*)&save, sizeof(save));
+    if (!cheat_mode) // Don't save if you're cheating!
+        extapp_fileWrite(save_name, (char*)&save, sizeof(save));
 }
