@@ -63,18 +63,18 @@ const eadk_color_t* spr_digits[] = {
     spr_digit_0_data, spr_digit_1_data, spr_digit_2_data, spr_digit_3_data, spr_digit_4_data,
     spr_digit_5_data, spr_digit_6_data, spr_digit_7_data, spr_digit_8_data, spr_digit_9_data,
 };
-const int spr_digit_width = 24;
-const int spr_digit_height = 36;
-const int spr_digit_1_width = 16;
+const int spr_digit_width = 12;
+const int spr_digit_height = 18;
+const int spr_digit_1_width = 8;
 const int digit_y = 30;
 
 INCBIN(eadk_color_t, spr_title, "spritesbin/title.bin");
-const int spr_title_width = 178;
-const int spr_title_height = 48;
+const int spr_title_width = 89;
+const int spr_title_height = 24;
 
 INCBIN(eadk_color_t, spr_ready, "spritesbin/ready.bin");
-const int spr_ready_width = 184;
-const int spr_ready_height = 50;
+const int spr_ready_width = 92;
+const int spr_ready_height = 25;
 const int ready_y = 130;
 
 int blink = 0;
@@ -140,6 +140,18 @@ void draw_sprite_line(eadk_color_t line_buffer[], int sprite_x, int y, int sprit
     }
 }
 
+void draw_sprite_line_doubled(eadk_color_t line_buffer[], int sprite_x, int y, int sprite_width, const eadk_color_t sprite[]) {
+    int i = 0;
+    for (int x = max(0, sprite_x); x<min(sprite_x+2*sprite_width, EADK_SCREEN_WIDTH-1); x+=2) {
+        eadk_color_t pixel_color = sprite[i + y * sprite_width];
+        if (pixel_color != transparent_color) {
+            line_buffer[x] = pixel_color;
+            line_buffer[x+1] = pixel_color;
+        }
+        i++;
+    }
+}
+
 typedef enum {
     GAME_NOT_STARTED,
     GAME_ON,
@@ -158,8 +170,6 @@ void end_game() {
         save.high_score = score;
         save.high_score_speed = save.scroll_speed;
     }
-
-    score=save.high_score;//DEBUG
 };
 
 void init_game() {
@@ -283,7 +293,7 @@ int main() {
         int score_width = 2; // Account for the last rows
         int score_digits = score;
         for (int i=0;i<score_digit_count;i++) {
-            score_width += (score_digits%10==1? spr_digit_1_width : spr_digit_width) - 2; // digit 1 has a different width + -2px margin
+            score_width += 2*(score_digits%10==1? spr_digit_1_width : spr_digit_width) - 2; // digit 1 has a different width + sprites are scaled x2 + -2px margin
             score_digits /= 10; // Next digit
         }
         int score_base_x = (EADK_SCREEN_WIDTH+score_width)/2 - 2;
@@ -338,25 +348,25 @@ int main() {
 
             if (game_state == GAME_NOT_STARTED) {
                 // Draw title
-                if (y >= digit_y && y < digit_y + spr_title_height) {
-                    draw_sprite_line(line_buffer, (EADK_SCREEN_WIDTH-spr_title_width)/2, y-digit_y, spr_title_width, spr_title_data);
+                if (y >= digit_y && y < digit_y + spr_title_height*2) {
+                    draw_sprite_line_doubled(line_buffer, EADK_SCREEN_WIDTH/2-spr_title_width, (y-digit_y)/2, spr_title_width, spr_title_data);
                 }
 
                 // Draw blinking "Get ready!"
-                if (!((blink/16)%2) && y >= ready_y && y < ready_y + spr_ready_height) {
-                    draw_sprite_line(line_buffer, (EADK_SCREEN_WIDTH-spr_ready_width)/2, y-ready_y, spr_ready_width, spr_ready_data);
+                if (!((blink/16)%2) && y >= ready_y && y < ready_y + spr_ready_height*2) {
+                    draw_sprite_line_doubled(line_buffer, EADK_SCREEN_WIDTH/2-spr_ready_width, (y-ready_y)/2, spr_ready_width, spr_ready_data);
                 }
             } else if (!((blink/16)%2)) { // Check blinking
                 // Draw score
-                if (y >= digit_y && y < digit_y + spr_digit_height) {
+                if (y >= digit_y && y < digit_y + spr_digit_height*2) {
                     // Digits are drawn from right to left
                     int score_digits = score;
                     int x = score_base_x;
                     for (int i=0;i<score_digit_count;i++) {
                         int digit = score_digits%10;
-                        int width = digit==1? spr_digit_1_width : spr_digit_width; // Digit 1 has a different width than the others
+                        int width = 2*(digit==1? spr_digit_1_width : spr_digit_width); // Digit 1 has a different width than the others, and they're all scaled * 2
                         x -= width-2; // -2 pixels margin
-                        draw_sprite_line(line_buffer, x, y-digit_y, width, spr_digits[digit]);
+                        draw_sprite_line_doubled(line_buffer, x, (y-digit_y)/2, width/2, spr_digits[digit]);
                         score_digits /= 10; // Next digit
                     }
                 }
