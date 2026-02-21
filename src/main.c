@@ -1,5 +1,7 @@
 #include "eadk.h"
+#include "storage.h"
 #include <math.h>
+#include <string.h>
 #define INCBIN_PREFIX
 #define INCBIN_STYLE INCBIN_STYLE_SNAKE
 #include "incbin.h"
@@ -79,7 +81,20 @@ int blink = 0;
 
 double scroll = 0;
 int score = 0;
-const double scroll_speed = 1.5;
+
+typedef struct {
+    int high_score;
+    double high_score_speed;
+    double scroll_speed;
+} save_t;
+save_t save = {0, 0., 1.5};
+
+const char* save_name = "flappy.score";
+size_t save_size = sizeof(save);
+union save_reader_t {
+    char raw_data[sizeof(save)];
+    save_t save;
+};
 
 const int bird_x = 50;
 int bird_y;
@@ -137,6 +152,14 @@ void end_game() {
     blink = 0;
     game_state = GAME_OVER;
     bird_dy = -8;
+
+    // Save high score
+    if (score > save.high_score) {
+        save.high_score = score;
+        save.high_score_speed = save.scroll_speed;
+    }
+
+    score=save.high_score;//DEBUG
 };
 
 void init_game() {
@@ -171,6 +194,16 @@ void update_bird_fall() {
 }
 
 int main() {
+    // Load high score
+    if (extapp_fileExists(save_name)) {
+        const char* save_raw_data = extapp_fileRead(save_name, &save_size);
+        if (save_raw_data != NULL) {
+            union save_reader_t save_reader;
+            memcpy(save_reader.raw_data, save_raw_data, sizeof(save_reader));
+            save = save_reader.save;
+        }
+    }
+
     init_game();
 
     while (true) {
@@ -229,11 +262,11 @@ int main() {
                 update_bird_fall();
 
                 // Scroll screen
-                scroll+=scroll_speed;
+                scroll+=save.scroll_speed;
                 for (int i=0;i<pipes_size;i++) { // Scroll pipes
-                    if (pipes[i].x+spr_pipe_width >= bird_x && pipes[i].x - scroll_speed + spr_pipe_width < bird_x) // Check if pipe passes the bird
+                    if (pipes[i].x+spr_pipe_width >= bird_x && pipes[i].x - save.scroll_speed + spr_pipe_width < bird_x) // Check if pipe passes the bird
                         score++;
-                    pipes[i].x -= scroll_speed;
+                    pipes[i].x -= save.scroll_speed;
                     if (pipes[i].x < -space_between_pipes) { // Wrap around
                         pipes[i].x = EADK_SCREEN_WIDTH;
                         pipes[i].hole_y = random_pipe_hole_height();
@@ -353,6 +386,9 @@ int main() {
         }
         eadk_display_wait_for_vblank();
 
-        if (eadk_keyboard_key_down(keyboard, eadk_key_home)) return 0;
+        if (eadk_keyboard_key_down(keyboard, eadk_key_home)) break;
     }
+
+    // Save file
+    extapp_fileWrite(save_name, (char*)&save, sizeof(save));
 }
